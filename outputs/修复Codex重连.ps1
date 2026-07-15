@@ -7,6 +7,8 @@ param(
 
     [switch]$RestartCodex,
 
+    [switch]$RestartVSCode,
+
     [switch]$SkipConnectionTest
 )
 
@@ -176,7 +178,40 @@ function Restart-CodexApplication {
 
     if (-not $appId) {
         Write-Warning 'The Codex application registration was not found. Restart Codex manually.'
-        return
+    }
+
+    $codePath = $null
+    if ($RestartVSCode) {
+        $codePath = Get-Process -Name 'Code' -ErrorAction SilentlyContinue |
+            Where-Object Path |
+            Select-Object -First 1 -ExpandProperty Path
+
+        if (-not $codePath) {
+            $codeCommand = Get-Command 'code.cmd' -ErrorAction SilentlyContinue
+            if ($codeCommand) {
+                $codePath = $codeCommand.Source
+            }
+        }
+    }
+
+    $restartVSCodeCommands = ''
+    if ($RestartVSCode) {
+        if ($codePath) {
+            $escapedCodePath = $codePath.Replace("'", "''")
+            $restartVSCodeCommands = @"
+Get-Process -Name 'Code' -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+Start-Process -FilePath '$escapedCodePath'
+"@
+        }
+        else {
+            Write-Warning 'VS Code executable was not found. Restart VS Code manually.'
+        }
+    }
+
+    $restartCodexCommand = ''
+    if ($appId) {
+        $restartCodexCommand = "Start-Process 'explorer.exe' 'shell:AppsFolder\$appId'"
     }
 
     $helperPath = Join-Path $env:TEMP 'restart-codex-after-proxy-fix.ps1'
@@ -184,7 +219,8 @@ function Restart-CodexApplication {
 Start-Sleep -Seconds 3
 Get-Process -Name 'ChatGPT','Codex','codex' -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Seconds 2
-Start-Process 'explorer.exe' 'shell:AppsFolder\$appId'
+$restartVSCodeCommands
+$restartCodexCommand
 Remove-Item -LiteralPath `$PSCommandPath -Force -ErrorAction SilentlyContinue
 "@
 
@@ -193,7 +229,7 @@ Remove-Item -LiteralPath `$PSCommandPath -Force -ErrorAction SilentlyContinue
         -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $helperPath) `
         -WindowStyle Hidden
 
-    Write-Host 'Codex restart scheduled. This window may close shortly.'
+    Write-Host 'Codex client restart scheduled. Application windows may close shortly.'
 }
 
 function Show-Status {
