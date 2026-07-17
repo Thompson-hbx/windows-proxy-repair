@@ -26,6 +26,9 @@ $EnvironmentNames = @(
 $BackupDirectory = Join-Path $env:LOCALAPPDATA 'CodexProxyFix'
 $BackupPath = Join-Path $BackupDirectory 'environment-backup.json'
 $DefaultNoProxy = 'localhost,127.0.0.1,::1,172.31.0.0/16'
+$ConnectionTestMaxAttempts = 3
+$ConnectionTestInitialDelaySeconds = 2
+$ConnectionTestRetryDelaySeconds = 2
 
 function Get-UserEnvironmentValue {
     param([Parameter(Mandatory)][string]$Name)
@@ -103,43 +106,62 @@ function Test-ProxyConnection {
     param([Parameter(Mandatory)][string]$ProxyUrl)
 
     $uri = [Uri]$ProxyUrl
-    $tcp = [Net.Sockets.TcpClient]::new()
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
 
-    try {
-        $connectTask = $tcp.ConnectAsync($uri.Host, $uri.Port)
-        if (-not $connectTask.Wait(3000) -or -not $tcp.Connected) {
-            throw "Proxy is not listening at $($uri.Host):$($uri.Port)."
+    Write-Host "Waiting $ConnectionTestInitialDelaySeconds seconds for the proxy to stabilize..."
+    Start-Sleep -Seconds $ConnectionTestInitialDelaySeconds
+
+    $lastFailure = 'Unknown connection test failure.'
+    for ($attempt = 1; $attempt -le $ConnectionTestMaxAttempts; $attempt++) {
+        $tcp = [Net.Sockets.TcpClient]::new()
+
+        try {
+            $connectTask = $tcp.ConnectAsync($uri.Host, $uri.Port)
+            if (-not $connectTask.Wait(3000) -or -not $tcp.Connected) {
+                throw "Proxy is not listening at $($uri.Host):$($uri.Port)."
+            }
+
+            if (-not $curl) {
+                Write-Warning 'curl.exe was not found. The local proxy port is open, but the OpenAI endpoint was not tested.'
+                return
+            }
+
+            $status = & $curl.Source `
+                --silent `
+                --show-error `
+                --output NUL `
+                --write-out '%{http_code}' `
+                --connect-timeout 8 `
+                --max-time 20 `
+                --proxy $ProxyUrl `
+                'https://api.openai.com/v1/models'
+            $curlExitCode = $LASTEXITCODE
+
+            if ($curlExitCode -ne 0) {
+                throw "The proxy cannot reach OpenAI. curl.exe exited with code $curlExitCode."
+            }
+
+            if ($status -notin @('200', '401')) {
+                throw "The proxy reached OpenAI but returned unexpected HTTP status $status."
+            }
+
+            Write-Host "OpenAI connection test passed on attempt $attempt/$ConnectionTestMaxAttempts (HTTP $status)."
+            return
+        }
+        catch {
+            $lastFailure = $_.Exception.GetBaseException().Message
+        }
+        finally {
+            $tcp.Dispose()
+        }
+
+        if ($attempt -lt $ConnectionTestMaxAttempts) {
+            Write-Warning "$lastFailure Retrying in $ConnectionTestRetryDelaySeconds seconds ($attempt/$ConnectionTestMaxAttempts)..."
+            Start-Sleep -Seconds $ConnectionTestRetryDelaySeconds
         }
     }
-    finally {
-        $tcp.Dispose()
-    }
 
-    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
-    if (-not $curl) {
-        Write-Warning 'curl.exe was not found. The local proxy port is open, but the OpenAI endpoint was not tested.'
-        return
-    }
-
-    $status = & $curl.Source `
-        --silent `
-        --show-error `
-        --output NUL `
-        --write-out '%{http_code}' `
-        --connect-timeout 8 `
-        --max-time 20 `
-        --proxy $ProxyUrl `
-        'https://api.openai.com/v1/models'
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "The proxy cannot reach OpenAI. curl.exe exited with code $LASTEXITCODE."
-    }
-
-    if ($status -notin @('200', '401')) {
-        throw "The proxy reached OpenAI but returned unexpected HTTP status $status."
-    }
-
-    Write-Host "OpenAI connection test passed (HTTP $status)."
+    throw "$lastFailure Failed after $ConnectionTestMaxAttempts attempts."
 }
 
 function Save-EnvironmentBackup {
