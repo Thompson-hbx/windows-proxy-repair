@@ -175,6 +175,7 @@ function Invoke-CurlTest {
     }
     finally {
         $ErrorActionPreference = $previousPreference
+        $global:LASTEXITCODE = 0
     }
     $status = 0
     [void][int]::TryParse(([string]$text).Trim(), [ref]$status)

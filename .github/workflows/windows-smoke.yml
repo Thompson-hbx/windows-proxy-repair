@@ -86,6 +86,7 @@ jobs:
             ($_ | Format-List * -Force | Out-String) | Tee-Object -FilePath smoke.log -Append
             throw
           }
+          $global:LASTEXITCODE = 0
 
       - name: Upload smoke log
         if: always()
