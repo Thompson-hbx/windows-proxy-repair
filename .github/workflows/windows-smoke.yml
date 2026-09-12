@@ -15,7 +15,7 @@ jobs:
         shell: powershell
         run: |
           $failed = $false
-          Get-ChildItem -Path outputs -Filter *.ps1 | ForEach-Object {
+          Get-ChildItem -Path scripts -Recurse -Filter *.ps1 | ForEach-Object {
             $tokens = $null
             $errors = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile(
@@ -35,14 +35,14 @@ jobs:
         shell: powershell
         run: |
           $failed = $false
-          $scripts = @(Get-ChildItem -Path outputs -Filter *.ps1 | Sort-Object Name)
-          if ($scripts.Count -lt 2) {
-            throw 'Expected at least two PowerShell entry points in outputs/.'
-          }
+          $scripts = @(
+            '.\scripts\proxy-repair.ps1',
+            '.\scripts\compat\codex-proxy-fix.ps1'
+          )
           foreach ($script in $scripts) {
-            "=== STATUS: $($script.FullName) ===" | Tee-Object -FilePath smoke.log -Append
+            "=== STATUS: $script ===" | Tee-Object -FilePath smoke.log -Append
             try {
-              (& $script.FullName -Action Status 2>&1 | Out-String) | Tee-Object -FilePath smoke.log -Append
+              (& $script -Action Status 2>&1 | Out-String) | Tee-Object -FilePath smoke.log -Append
             }
             catch {
               ($_ | Format-List * -Force | Out-String) | Tee-Object -FilePath smoke.log -Append
