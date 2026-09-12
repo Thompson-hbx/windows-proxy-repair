@@ -1,0 +1,140 @@
+name: Windows smoke test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  powershell-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse PowerShell scripts
+        shell: powershell
+        run: |
+          $failed = $false
+          Get-ChildItem -Path scripts -Recurse -Filter *.ps1 | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName,
+              [ref]$tokens,
+              [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              "Parser errors in $($_.FullName):" | Tee-Object -FilePath smoke.log -Append
+              ($errors | Format-List | Out-String) | Tee-Object -FilePath smoke.log -Append
+              $failed = $true
+            }
+          }
+          if ($failed) { throw 'PowerShell parser errors detected.' }
+
+      - name: Run non-mutating status checks
+        shell: powershell
+        run: |
+          $failed = $false
+          $scripts = @(
+            '.\scripts\proxy-repair.ps1',
+            '.\scripts\compat\codex-proxy-fix.ps1'
+          )
+          foreach ($script in $scripts) {
+            "=== STATUS: $script ===" | Tee-Object -FilePath smoke.log -Append
+            try {
+              (& $script -Action Status 2>&1 | Out-String) | Tee-Object -FilePath smoke.log -Append
+            }
+            catch {
+              ($_ | Format-List * -Force | Out-String) | Tee-Object -FilePath smoke.log -Append
+              $failed = $true
+            }
+          }
+          if ($failed) { throw 'One or more status checks failed. See smoke.log artifact.' }
+
+      - name: Verify native curl failures are captured without throwing
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path '.\scripts\proxy-repair.ps1'),
+            [ref]$null,
+            [ref]$null
+          )
+          $funcAst = $ast.Find({
+            $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $args[0].Name -eq 'Invoke-CurlTest'
+          }, $true)
+          if (-not $funcAst) { throw 'Invoke-CurlTest function AST not found.' }
+          . ([scriptblock]::Create($funcAst.Extent.Text))
+
+          $dummyTarget = [pscustomobject]@{
+            Name = 'CI Offline Target'
+            Url = 'http://127.0.0.1:65534'
+            Codes = @(200)
+            AnyHttp = $false
+          }
+
+          try {
+            $result = Invoke-CurlTest -Target $dummyTarget -Direct -ConnectTimeout 1 -MaxTime 2
+            ("=== REGRESSION: Invoke-CurlTest non-zero exit ===") | Tee-Object -FilePath smoke.log -Append
+            ("Result: Passed={0}, ExitCode={1}, Message={2}" -f $result.Passed, $result.ExitCode, $result.Message) | Tee-Object -FilePath smoke.log -Append
+            if ($result.Passed -ne $false) { throw "Expected Passed to be false, got $($result.Passed)" }
+            if ($null -eq $result.ExitCode -or $result.ExitCode -eq 0) { throw "Expected non-zero ExitCode, got $($result.ExitCode)" }
+            if ($result.Message -notmatch '^curl exit \d+$') { throw "Unexpected Message format: $($result.Message)" }
+          }
+          catch {
+            ($_ | Format-List * -Force | Out-String) | Tee-Object -FilePath smoke.log -Append
+            throw
+          }
+          $global:LASTEXITCODE = 0
+
+      - name: Verify Codex and ChatGPT restart compatibility detection
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path '.\scripts\proxy-repair.ps1'),
+            [ref]$null,
+            [ref]$null
+          )
+          $funcAppId = $ast.Find({
+            $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $args[0].Name -eq 'Get-CodexAppId'
+          }, $true)
+          if (-not $funcAppId) { throw 'Get-CodexAppId function AST not found.' }
+          if ($funcAppId.Extent.Text -notmatch 'ChatGPT') {
+            throw 'Get-CodexAppId does not contain ChatGPT fallback match.'
+          }
+
+          $funcRestart = $ast.Find({
+            $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $args[0].Name -eq 'Schedule-Restarts'
+          }, $true)
+          if (-not $funcRestart) { throw 'Schedule-Restarts function AST not found.' }
+          if ($funcRestart.Extent.Text -notmatch "Get-Process -Name 'Codex','ChatGPT'") {
+            throw 'Schedule-Restarts does not check Codex and ChatGPT process names.'
+          }
+          if ($funcRestart.Extent.Text -notmatch "Get-Process -Name 'ChatGPT','Codex'") {
+            throw 'Schedule-Restarts does not stop ChatGPT and Codex processes.'
+          }
+
+          function Get-AppxPackage { $null }
+          function Get-StartApps {
+            [pscustomobject]@{ Name = 'ChatGPT'; AppID = 'OpenAI.ChatGPT_8wekyb3d8bbwe!App' }
+          }
+          . ([scriptblock]::Create($funcAppId.Extent.Text))
+          $appId = Get-CodexAppId
+          if ($appId -ne 'OpenAI.ChatGPT_8wekyb3d8bbwe!App') {
+            throw "Expected AppID OpenAI.ChatGPT_8wekyb3d8bbwe!App, got $appId"
+          }
+
+          ("=== REGRESSION: Codex restart compatibility passed ===") | Tee-Object -FilePath smoke.log -Append
+          $global:LASTEXITCODE = 0
+
+      - name: Upload smoke log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-smoke-log
+          path: smoke.log
+          if-no-files-found: ignore
