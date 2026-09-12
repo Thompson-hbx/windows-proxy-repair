@@ -2,7 +2,7 @@ name: Windows smoke test
 
 on:
   push:
-    branches: [main, feat/unified-proxy-repair]
+    branches: [main]
   pull_request:
 
 jobs:
