@@ -88,6 +88,49 @@ jobs:
           }
           $global:LASTEXITCODE = 0
 
+      - name: Verify Codex and ChatGPT restart compatibility detection
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path '.\scripts\proxy-repair.ps1'),
+            [ref]$null,
+            [ref]$null
+          )
+          $funcAppId = $ast.Find({
+            $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $args[0].Name -eq 'Get-CodexAppId'
+          }, $true)
+          if (-not $funcAppId) { throw 'Get-CodexAppId function AST not found.' }
+          if ($funcAppId.Extent.Text -notmatch 'ChatGPT') {
+            throw 'Get-CodexAppId does not contain ChatGPT fallback match.'
+          }
+
+          $funcRestart = $ast.Find({
+            $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $args[0].Name -eq 'Schedule-Restarts'
+          }, $true)
+          if (-not $funcRestart) { throw 'Schedule-Restarts function AST not found.' }
+          if ($funcRestart.Extent.Text -notmatch "Get-Process -Name 'Codex','ChatGPT'") {
+            throw 'Schedule-Restarts does not check Codex and ChatGPT process names.'
+          }
+          if ($funcRestart.Extent.Text -notmatch "Get-Process -Name 'ChatGPT','Codex'") {
+            throw 'Schedule-Restarts does not stop ChatGPT and Codex processes.'
+          }
+
+          function Get-AppxPackage { $null }
+          function Get-StartApps {
+            [pscustomobject]@{ Name = 'ChatGPT'; AppID = 'OpenAI.ChatGPT_8wekyb3d8bbwe!App' }
+          }
+          . ([scriptblock]::Create($funcAppId.Extent.Text))
+          $appId = Get-CodexAppId
+          if ($appId -ne 'OpenAI.ChatGPT_8wekyb3d8bbwe!App') {
+            throw "Expected AppID OpenAI.ChatGPT_8wekyb3d8bbwe!App, got $appId"
+          }
+
+          ("=== REGRESSION: Codex restart compatibility passed ===") | Tee-Object -FilePath smoke.log -Append
+          $global:LASTEXITCODE = 0
+
       - name: Upload smoke log
         if: always()
         uses: actions/upload-artifact@v4

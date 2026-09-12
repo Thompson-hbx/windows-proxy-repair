@@ -311,7 +311,9 @@ namespace ProxyEnvironmentFix {
 function Get-CodexAppId {
     $package = Get-AppxPackage -Name 'OpenAI.Codex' -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
     if ($package) { return "$($package.PackageFamilyName)!App" }
-    $app = Get-StartApps -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'Codex' -or $_.AppID -like '*OpenAI.Codex*' } | Select-Object -First 1
+    $app = Get-StartApps -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -in @('Codex', 'ChatGPT') -or $_.AppID -like '*OpenAI.Codex*' } |
+        Select-Object -First 1
     if ($app) { return $app.AppID }
     $null
 }
@@ -333,7 +335,7 @@ function Schedule-Restarts {
     if ($OnlyIfRunning) {
         $VSCode = $VSCode -and [bool](Get-Process Code -ErrorAction SilentlyContinue)
         $Antigravity = $Antigravity -and [bool](Get-Process Antigravity -ErrorAction SilentlyContinue)
-        $Codex = $Codex -and [bool](Get-Process Codex -ErrorAction SilentlyContinue)
+        $Codex = $Codex -and [bool](Get-Process -Name 'Codex','ChatGPT' -ErrorAction SilentlyContinue)
     }
     if (-not ($Codex -or $VSCode -or $Antigravity)) { return }
 
@@ -359,8 +361,7 @@ function Schedule-Restarts {
     }
     if ($Codex) {
         $appId = Get-CodexAppId
-        if ($LegacyCodexBehavior) { $lines += "Get-Process ChatGPT,Codex -ErrorAction SilentlyContinue | Stop-Process -Force" }
-        else { $lines += "Get-Process Codex -ErrorAction SilentlyContinue | Stop-Process -Force" }
+        $lines += "Get-Process -Name 'ChatGPT','Codex' -ErrorAction SilentlyContinue | Stop-Process -Force"
         $lines += 'Start-Sleep -Seconds 2'
         if ($appId) { $lines += "Start-Process explorer.exe 'shell:AppsFolder\$($appId.Replace("'","''"))'" }
         else { Write-Warning 'Codex registration not found; restart it manually.' }
