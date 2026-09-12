@@ -13,10 +13,18 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$coreScript = Join-Path $PSScriptRoot '修复代理环境.ps1'
 
-if (-not (Test-Path -LiteralPath $coreScript)) {
-    throw "Unified proxy repair script was not found: $coreScript"
+$coreScript = Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.ps1' -File |
+    Where-Object { $_.FullName -ne $PSCommandPath } |
+    Where-Object {
+        Select-String -LiteralPath $_.FullName `
+            -Pattern "ValidateSet\('Diagnose', 'Install', 'Status', 'Remove', 'Test'\)" `
+            -Quiet
+    } |
+    Select-Object -First 1 -ExpandProperty FullName
+
+if (-not $coreScript) {
+    throw 'Unified proxy repair core was not found beside the compatibility script.'
 }
 
 $arguments = @{
