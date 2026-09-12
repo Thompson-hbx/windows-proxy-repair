@@ -2,10 +2,10 @@
 setlocal
 chcp 65001 >nul
 
-set "PS_SCRIPT=%~dp0修复Codex重连.ps1"
+set "PS_SCRIPT=%~dp0codex-proxy-fix.ps1"
 
 if not exist "%PS_SCRIPT%" (
-    echo ERROR: PowerShell repair script was not found:
+    echo ERROR: PowerShell compatibility script was not found:
     echo   "%PS_SCRIPT%"
     exit /b 1
 )
@@ -18,6 +18,7 @@ echo WARNING: This repair will close and restart VS Code and Codex.
 echo Save all open files before continuing.
 choice /c YN /n /m "Continue? [Y/N] "
 if errorlevel 2 exit /b 3
+
 echo.
 echo Repairing Codex proxy settings...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PS_SCRIPT%" -Action Install -RestartCodex -RestartVSCode
@@ -42,6 +43,7 @@ echo WARNING: Rollback will close and restart VS Code and Codex.
 echo Save all open files before continuing.
 choice /c YN /n /m "Continue? [Y/N] "
 if errorlevel 2 exit /b 3
+
 echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PS_SCRIPT%" -Action Remove -RestartCodex -RestartVSCode
 exit /b %ERRORLEVEL%
