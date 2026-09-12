@@ -1,19 +1,25 @@
 # Project Instructions
 
-- Repository overview: Windows troubleshooting scripts for recurring Codex proxy and reconnect failures.
+- Repository overview: standalone Windows proxy-environment diagnostics and repair for env-aware AI/CLI clients, with backward-compatible Codex entry points.
+- Primary entry points: `outputs/一键修复代理环境.bat` and `outputs/修复代理环境.ps1`.
+- Legacy compatibility entry points: `outputs/一键修复Codex重连.bat` and `outputs/修复Codex重连.ps1`.
 - Important directories: final scripts belong in `outputs/`; temporary test artifacts belong in `work/`.
-- Entry points: `outputs/一键修复Codex重连.bat` and `outputs/修复Codex重连.ps1`.
 - Build: not applicable.
-- Test/status command: `powershell -NoProfile -ExecutionPolicy Bypass -File "outputs/修复Codex重连.ps1" -Action Status`.
+- Primary status command: `powershell -NoProfile -ExecutionPolicy Bypass -File "outputs/修复代理环境.ps1" -Action Status`.
+- Primary diagnose command: `powershell -NoProfile -ExecutionPolicy Bypass -File "outputs/修复代理环境.ps1" -Action Diagnose -Profile All`.
+- Legacy status command must remain valid: `powershell -NoProfile -ExecutionPolicy Bypass -File "outputs/修复Codex重连.ps1" -Action Status`.
 - Coding conventions: prefer PowerShell for logic and keep batch files as thin wrappers.
-- Architecture rule: proxy detection, backup, mutation, rollback, and restart logic stay in the PowerShell script.
-- This workspace contains user-facing troubleshooting deliverables.
-- Put final deliverables in `outputs/`.
-- Put temporary files and test artifacts in `work/`.
-- Prefer PowerShell for Windows automation.
+- Architecture rule: proxy discovery, route tests, backup, mutation, rollback, environment-change broadcast, and restart logic belong in `outputs/修复代理环境.ps1`.
+- Legacy `修复Codex重连.ps1` should remain a thin compatibility adapter; do not duplicate the repair implementation there.
 - Scripts that change user settings must support status inspection and rollback.
-- Do not store credentials, tokens, cookies, or session data.
-- Do not change proxy environment variable names or backup format without preserving rollback compatibility.
-- Do not add dependencies for this standalone Windows script.
-- Verification checklist: parse the PowerShell script, run batch `status`, and confirm install/remove paths remain available.
-- Definition of done: scripts are syntax-valid, status works without mutation, repair has a connection test, and rollback remains documented.
+- Diagnose/status actions must not mutate user settings.
+- Repair must preserve existing `NO_PROXY` entries and ensure `localhost`, `127.0.0.1`, and `::1` remain bypassed.
+- Do not store credentials, tokens, cookies, OAuth codes, or session data.
+- Do not disable TLS validation, Chromium sandboxing, Defender, or the Windows firewall as a repair strategy.
+- Do not modify sing-box/Clash configuration unless the repository scope is explicitly expanded in a future change.
+- Preserve rollback compatibility with `%LOCALAPPDATA%\CodexProxyFix\environment-backup.json` and the existing backup object shape.
+- The generic backup lives at `%LOCALAPPDATA%\ProxyEnvironmentFix\environment-backup.json`; when safe, import an existing legacy Codex backup as the original baseline instead of overwriting history.
+- Do not add external dependencies; the tool must remain standalone on supported Windows installations.
+- When adding another `.ps1` to `outputs/`, batch wrappers must reference their intended script explicitly. Never use an unrestricted `*.ps1` selector.
+- Verification checklist: PowerShell parser has zero syntax errors; generic batch `status` and `diagnose` are non-mutating; legacy batch `status` still works; install retains connection tests; remove restores the saved baseline.
+- Definition of done: unified core is syntax-valid, route diagnosis distinguishes direct vs proxied access, repair is reversible, loopback bypass is preserved, and legacy Codex usage remains operational.
