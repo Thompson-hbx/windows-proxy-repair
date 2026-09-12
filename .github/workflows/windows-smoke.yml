@@ -51,6 +51,42 @@ jobs:
           }
           if ($failed) { throw 'One or more status checks failed. See smoke.log artifact.' }
 
+      - name: Verify native curl failures are captured without throwing
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path '.\scripts\proxy-repair.ps1'),
+            [ref]$null,
+            [ref]$null
+          )
+          $funcAst = $ast.Find({
+            $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $args[0].Name -eq 'Invoke-CurlTest'
+          }, $true)
+          if (-not $funcAst) { throw 'Invoke-CurlTest function AST not found.' }
+          . ([scriptblock]::Create($funcAst.Extent.Text))
+
+          $dummyTarget = [pscustomobject]@{
+            Name = 'CI Offline Target'
+            Url = 'http://127.0.0.1:65534'
+            Codes = @(200)
+            AnyHttp = $false
+          }
+
+          try {
+            $result = Invoke-CurlTest -Target $dummyTarget -Direct -ConnectTimeout 1 -MaxTime 2
+            ("=== REGRESSION: Invoke-CurlTest non-zero exit ===") | Tee-Object -FilePath smoke.log -Append
+            ("Result: Passed={0}, ExitCode={1}, Message={2}" -f $result.Passed, $result.ExitCode, $result.Message) | Tee-Object -FilePath smoke.log -Append
+            if ($result.Passed -ne $false) { throw "Expected Passed to be false, got $($result.Passed)" }
+            if ($null -eq $result.ExitCode -or $result.ExitCode -eq 0) { throw "Expected non-zero ExitCode, got $($result.ExitCode)" }
+            if ($result.Message -notmatch '^curl exit \d+$') { throw "Unexpected Message format: $($result.Message)" }
+          }
+          catch {
+            ($_ | Format-List * -Force | Out-String) | Tee-Object -FilePath smoke.log -Append
+            throw
+          }
+
       - name: Upload smoke log
         if: always()
         uses: actions/upload-artifact@v4

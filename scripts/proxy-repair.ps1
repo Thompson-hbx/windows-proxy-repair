@@ -162,8 +162,20 @@ function Invoke-CurlTest {
     elseif ($ProxyUrl) { $argsList += @('--proxy',$ProxyUrl) }
     $argsList += $Target.Url
 
-    $text = & $curl.Source @argsList 2>$null
-    $exitCode = $LASTEXITCODE
+    $previousPreference = $ErrorActionPreference
+    $text = $null
+    $exitCode = $null
+    try {
+        $ErrorActionPreference = 'SilentlyContinue'
+        $text = & $curl.Source @argsList 2>$null
+        $exitCode = $LASTEXITCODE
+    }
+    catch {
+        $exitCode = if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) { $LASTEXITCODE } else { 1 }
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
     $status = 0
     [void][int]::TryParse(([string]$text).Trim(), [ref]$status)
     $passed = $false
