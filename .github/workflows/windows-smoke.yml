@@ -24,8 +24,8 @@ jobs:
               [ref]$errors
             )
             if ($errors.Count -gt 0) {
-              Write-Host "Parser errors in $($_.FullName):"
-              $errors | Format-List
+              "Parser errors in $($_.FullName):" | Tee-Object -FilePath smoke.log -Append
+              ($errors | Format-List | Out-String) | Tee-Object -FilePath smoke.log -Append
               $failed = $true
             }
           }
@@ -34,5 +34,23 @@ jobs:
       - name: Run non-mutating status checks
         shell: powershell
         run: |
-          & '.\outputs\修复代理环境.ps1' -Action Status
-          & '.\outputs\修复Codex重连.ps1' -Action Status
+          $failed = $false
+          foreach ($script in @('.\outputs\修复代理环境.ps1', '.\outputs\修复Codex重连.ps1')) {
+            "=== STATUS: $script ===" | Tee-Object -FilePath smoke.log -Append
+            try {
+              (& $script -Action Status 2>&1 | Out-String) | Tee-Object -FilePath smoke.log -Append
+            }
+            catch {
+              ($_ | Format-List * -Force | Out-String) | Tee-Object -FilePath smoke.log -Append
+              $failed = $true
+            }
+          }
+          if ($failed) { throw 'One or more status checks failed. See smoke.log artifact.' }
+
+      - name: Upload smoke log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-smoke-log
+          path: smoke.log
+          if-no-files-found: ignore
