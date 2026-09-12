@@ -1,11 +1,14 @@
-# Windows 代理环境修复工具
+# Windows Proxy Repair (Windows 代理环境修复工具)
 
-本仓库用于诊断和修复 Windows 上一类常见的代理断层问题：浏览器或 Electron 能读取 Windows 系统代理，但 CLI、Go 后端、language server 等进程只读取 `HTTP_PROXY` / `HTTPS_PROXY`，从而仍然直连外网并超时。
+> A Windows proxy-environment diagnostics and repair tool for env-aware AI/CLI clients.
 
-目前已覆盖两类真实故障：
+本工具用于诊断和修复 Windows 上一类常见的代理断层（process proxy gap）问题：浏览器或 Electron 等 GUI 客户端能读取 Windows 系统代理，但 CLI、Go 后端、language server 等进程只读取用户级环境变量 `HTTP_PROXY` / `HTTPS_PROXY`，从而仍直接尝试外网直连并导致连接超时或失败。
 
-- Codex / CLI 反复重连、OAuth token exchange 或 API 请求超时；
-- Antigravity 主程序启动，但 `language_server` 直连 Google 超时，导致本地 UI bootstrap 超时白屏。
+核心支持范围包括：
+
+- **Codex**：解决反复重连、OAuth token exchange 或 API 请求超时；
+- **Antigravity**：主程序启动但 `language_server` 直连 Google 超时导致本地 UI bootstrap 白屏；
+- **Go CLI / Language Server**：开发工具链、终端 CLI 及其他读取 `HTTP_PROXY` / `HTTPS_PROXY` 的 Windows 原生进程。
 
 ## 目录结构
 

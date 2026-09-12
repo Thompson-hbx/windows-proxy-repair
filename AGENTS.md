@@ -1,6 +1,8 @@
 # Project Instructions
 
-- Repository overview: standalone Windows proxy-environment diagnostics and repair for env-aware AI/CLI clients, with a backward-compatible Codex adapter.
+- Repository slug: `windows-proxy-repair`
+- Product identity: Windows Proxy Repair
+- Repository overview: standalone Windows proxy-environment diagnostics and repair for env-aware AI/CLI clients (such as Codex, Antigravity, Go CLI/language server, and other HTTP_PROXY-aware Windows processes), with a backward-compatible Codex adapter.
 - Canonical entry points: `scripts/proxy-repair.cmd` and `scripts/proxy-repair.ps1`.
 - Codex compatibility entry points: `scripts/compat/codex-proxy-fix.cmd` and `scripts/compat/codex-proxy-fix.ps1`.
 - Important directories: executable scripts belong in `scripts/`; compatibility adapters belong in `scripts/compat/`; temporary test artifacts belong in `tmp/`.
