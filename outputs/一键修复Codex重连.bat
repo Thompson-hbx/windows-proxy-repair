@@ -2,11 +2,11 @@
 setlocal
 chcp 65001 >nul
 
-set "PS_SCRIPT="
-for %%F in ("%~dp0*.ps1") do set "PS_SCRIPT=%%~fF"
+set "PS_SCRIPT=%~dp0修复Codex重连.ps1"
 
-if not defined PS_SCRIPT (
-    echo ERROR: PowerShell repair script was not found in "%~dp0".
+if not exist "%PS_SCRIPT%" (
+    echo ERROR: PowerShell repair script was not found:
+    echo   "%PS_SCRIPT%"
     exit /b 1
 )
 
