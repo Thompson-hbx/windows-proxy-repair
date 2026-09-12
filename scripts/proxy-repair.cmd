@@ -2,7 +2,7 @@
 setlocal
 chcp 65001 >nul
 
-set "PS_SCRIPT=%~dp0修复代理环境.ps1"
+set "PS_SCRIPT=%~dp0proxy-repair.ps1"
 
 if not exist "%PS_SCRIPT%" (
     echo ERROR: PowerShell repair script was not found:
